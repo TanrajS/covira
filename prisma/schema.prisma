@@ -1,0 +1,276 @@
+// Covira — Commercial Risk Broking CRM
+//
+// Local development runs on SQLite (zero setup). For production, change the
+// datasource provider to "postgresql", point DATABASE_URL at Postgres and swap
+// the driver adapter in src/lib/db.ts (see README).
+//
+// Enumerations are stored as strings and validated in application code
+// (src/lib/domain.ts) so the schema stays portable across SQLite and Postgres.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+// ─── Auth (Better Auth core tables + CRM fields on user) ───────────────────
+
+model User {
+  id            String   @id
+  name          String
+  email         String   @unique
+  emailVerified Boolean  @default(false)
+  image         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  /// Comma-separated capabilities: AE, BROKER, TEAM_LEAD, ADMIN.
+  /// A hybrid Broker/AE simply holds both "AE,BROKER".
+  roles  String  @default("AE")
+  title  String?
+  teamId String?
+  team   Team?   @relation(fields: [teamId], references: [id])
+
+  sessions      Session[]
+  accounts      Account[]
+  aeClients     Client[]            @relation("ClientAE")
+  brokerClients Client[]            @relation("ClientBroker")
+  documents     Document[]
+  updates       ClientUpdate[]
+  stageEvents   RenewalStageEvent[]
+
+  @@map("user")
+}
+
+model Session {
+  id        String   @id
+  expiresAt DateTime
+  token     String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ipAddress String?
+  userAgent String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("session")
+}
+
+model Account {
+  id                    String    @id
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([userId])
+  @@map("account")
+}
+
+model Verification {
+  id         String   @id
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([identifier])
+  @@map("verification")
+}
+
+// ─── Organisation ──────────────────────────────────────────────────────────
+
+model Team {
+  id      String   @id @default(cuid())
+  name    String   @unique
+  users   User[]
+  clients Client[]
+}
+
+// ─── Clients ───────────────────────────────────────────────────────────────
+
+model Client {
+  id              String  @id @default(cuid())
+  name            String
+  legalName       String?
+  industry        String
+  naicsCode       String?
+  annualRevenue   Float?
+  employeeCount   Int?
+  yearEstablished Int?
+  website         String?
+  hqCity          String?
+  hqRegion        String?
+  hqCountry       String  @default("Canada")
+  /// PROSPECT | ACTIVE | LAPSED
+  status          String  @default("ACTIVE")
+  /// Comma-separated CoverageLine keys this client must carry (drives Red cells
+  /// on the cross-sell matrix).
+  criticalLines   String  @default("P_C")
+
+  aeId     String?
+  ae       User?   @relation("ClientAE", fields: [aeId], references: [id])
+  brokerId String?
+  broker   User?   @relation("ClientBroker", fields: [brokerId], references: [id])
+  teamId   String?
+  team     Team?   @relation(fields: [teamId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  policies  Policy[]
+  documents Document[]
+  renewals  Renewal[]
+  updates   ClientUpdate[]
+
+  @@index([name])
+  @@index([aeId])
+  @@index([brokerId])
+}
+
+// ─── Policies & market participation ───────────────────────────────────────
+
+model Carrier {
+  id             String                @id @default(cuid())
+  name           String                @unique
+  participations PolicyParticipation[]
+}
+
+model Policy {
+  id            String    @id @default(cuid())
+  clientId      String
+  client        Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  /// P_C | CYBER | D_AND_O | E_AND_O | FINANCIAL_LINES
+  coverageLine  String
+  policyNumber  String
+  description   String?
+  effectiveDate DateTime
+  expiryDate    DateTime
+  premium       Float
+  limit         Float?
+  deductible    Float?
+  /// ACTIVE | QUOTED | EXPIRED | CANCELLED
+  status        String    @default("ACTIVE")
+  /// The client's master (anchor) policy — surfaced first by global search.
+  isMaster      Boolean   @default(false)
+
+  participations PolicyParticipation[]
+  documents      Document[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([clientId, status])
+}
+
+/// One insurer's line on a (possibly syndicated) placement. Shares on a
+/// policy must sum to 100%; exactly one participant is the lead market.
+model PolicyParticipation {
+  id           String  @id @default(cuid())
+  policyId     String
+  policy       Policy  @relation(fields: [policyId], references: [id], onDelete: Cascade)
+  carrierId    String
+  carrier      Carrier @relation(fields: [carrierId], references: [id])
+  sharePercent Float
+  isLead       Boolean @default(false)
+
+  @@unique([policyId, carrierId])
+}
+
+// ─── Term-year document vault ──────────────────────────────────────────────
+
+model Document {
+  id           String   @id @default(cuid())
+  clientId     String
+  client       Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  policyId     String?
+  policy       Policy?  @relation(fields: [policyId], references: [id], onDelete: SetNull)
+  /// Policy term the file belongs to, e.g. "2025-2026".
+  termYear     String
+  /// ACTIVE_POLICY | SOV | SUBMISSION | PROPOSAL
+  category     String
+  /// MASTER_POLICY | SCHEDULE | ENDORSEMENT | OTHER
+  docType      String   @default("OTHER")
+  fileName     String
+  storageKey   String   @unique
+  mimeType     String
+  sizeBytes    Int
+  notes        String?
+  uploadedById String
+  uploadedBy   User     @relation(fields: [uploadedById], references: [id])
+  createdAt    DateTime @default(now())
+
+  @@index([clientId, termYear, category])
+}
+
+// ─── Renewal pipeline ──────────────────────────────────────────────────────
+
+/// A client's renewal program for an upcoming term — one Kanban card.
+model Renewal {
+  id              String    @id @default(cuid())
+  clientId        String
+  client          Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  /// The term being renewed INTO, e.g. "2026-2027". SOVs must be filed here.
+  termYear        String
+  expiryDate      DateTime
+  /// D120 | D90 | D30 | BINDING | BOUND
+  stage           String    @default("D120")
+  stageEnteredAt  DateTime  @default(now())
+  expiringPremium Float
+  targetPremium   Float?
+  boundPremium    Float?
+  boundAt         DateTime?
+  notes           String?
+
+  events RenewalStageEvent[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([clientId, termYear])
+  @@index([stage])
+}
+
+model RenewalStageEvent {
+  id        String   @id @default(cuid())
+  renewalId String
+  renewal   Renewal  @relation(fields: [renewalId], references: [id], onDelete: Cascade)
+  fromStage String?
+  toStage   String
+  movedById String
+  movedBy   User     @relation(fields: [movedById], references: [id])
+  createdAt DateTime @default(now())
+
+  @@index([renewalId])
+}
+
+// ─── Client news & operational updates ─────────────────────────────────────
+
+model ClientUpdate {
+  id        String   @id @default(cuid())
+  clientId  String
+  client    Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  authorId  String
+  author    User     @relation(fields: [authorId], references: [id])
+  /// GENERAL | EXPANSION | EXPOSURE_CHANGE | CLAIMS | MARKET | LEADERSHIP
+  category  String   @default("GENERAL")
+  body      String
+  pinned    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([clientId, createdAt])
+}
