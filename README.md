@@ -7,20 +7,25 @@ Covira manages the commercial insurance renewal lifecycle, from gathering client
 ```bash
 npm install                     # also generates the Prisma client
 npm run db:start                # local Postgres via `prisma dev` (no Docker); prints a TCP URL
-cp .env.example .env            # paste that URL into DATABASE_URL, set BETTER_AUTH_SECRET (openssl rand -base64 32)
+cp .env.example .env            # paste that URL into DATABASE_URL
 npm run setup                   # migrate + seed demo data
 npm run dev                     # http://localhost:3000
 ```
 
-Demo accounts (password `Covira!2026`). The login page has one-click buttons for each.
+### No sign-in: choose a role
 
-| Email | Capabilities | Shows |
+Visitors don't log in. Opening the app shows a **Choose a role** screen, and the **Viewing as** menu in the top bar switches roles at any time. Each role acts as a seeded demo user, because permissions depend on which accounts a person is assigned to:
+
+| Role | Demo user | What it shows |
 |---|---|---|
-| `dan@covira.test` | AE + Broker | **Hybrid** user who runs whole accounts end-to-end |
-| `marcus@covira.test` | AE | Client Executive (gathers data, can't bind) |
-| `sofia@covira.test` | Broker | Commercial Risk Broker (markets, placements) |
-| `priya@covira.test` | Team Lead + Admin | Team roll-up, oversight of all team accounts |
-| `elena@covira.test` | AE | Second Client Executive |
+| Client Executive | Marcus Chen | Gathers data and uploads SOVs. Can't bind or send submissions. |
+| Commercial Risk Broker | Sofia Alvarez | Goes to market, manages placements and subscription splits, binds. |
+| Hybrid Broker / AE | Dan Kowalski | Holds **both** roles on the same accounts and runs the whole lifecycle. |
+| Team Lead | Priya Natarajan | Oversight of every team account, plus pipeline velocity and revenue roll-ups. |
+
+The roles are defined in `src/lib/personas.ts`. The chosen role is stored in a cookie, and the server only accepts the four known role values.
+
+**Turning real logins back on.** Set `AUTH_MODE=password` and `BETTER_AUTH_SECRET`. The role picker is then replaced by Better Auth email/password sign-in (optional Microsoft SSO) against the same users, with password `Covira!2026` for the seeded accounts. No other code changes are needed, because every page and action gets the current user from one place, `src/lib/dal.ts`.
 
 Seed dates are relative to when you run the seed, so the pipeline always looks current. Run `npm run db:seed` to reset.
 
@@ -31,7 +36,7 @@ Seed dates are relative to when you run the seed, so the pipeline always looks c
 | App framework | **Next.js 16** (App Router, Server Components, Server Actions, Cache Components) | UI and API ship as one deployable. Data access and permission checks run on the server next to the database, so no separate API tier is needed. |
 | Language | **TypeScript** (strict) | Types are shared from the database to the UI. |
 | Database | **Prisma 7** + **PostgreSQL** (`prisma dev` locally; Neon or Prisma Postgres on Vercel) | Local Postgres runs without Docker. Serverless hosts need a networked database, not a file. |
-| Auth | **Better Auth** (email/password, optional **Microsoft Entra ID** SSO) | Self-hosted, with session data kept in your own database. Brokerages typically run on Microsoft 365, so Entra SSO switches on with three env vars. Public sign-up is disabled. |
+| Access | **Role picker** now (demo mode). **Better Auth** is ready behind `AUTH_MODE=password` (email/password, optional **Microsoft Entra ID** SSO). | The instructor can open and use the app without signing in. Real auth is a config switch, not a rewrite, when the project scales. |
 | UI | **Tailwind CSS v4**, **lucide-react** icons, **dnd-kit** for drag-and-drop | dnd-kit is accessible (keyboard sensor included) and lets individual cards be disabled, which the workflow lock needs. |
 | Validation | **zod** | Every Server Action and upload is validated on the server. |
 | Files | **Vercel Blob** (private) when `BLOB_READ_WRITE_TOKEN` is set, otherwise local disk | Files are never public. Every download goes through a route that checks the user can see the account. The driver is in `src/lib/storage-driver.ts`. |
@@ -125,9 +130,8 @@ tests/rules.test.ts      permission matrix, workflow gates, matrix colours
 1. **Database.** In the Vercel project, go to **Storage → Marketplace**, add **Neon** (or **Prisma Postgres**), and connect it to the project. This sets `DATABASE_URL` (and `DATABASE_URL_UNPOOLED` for Neon, which migrations use).
 2. **File storage.** Go to **Storage → Blob**, create a store with **Private** access, and connect it. This sets `BLOB_READ_WRITE_TOKEN`.
 3. **Environment variables.** Under **Settings → Environment Variables**, add:
-   - `BETTER_AUTH_SECRET`: the output of `openssl rand -base64 32`.
+   - Nothing is needed for the default no-sign-in demo. For real logins, set `AUTH_MODE=password` and `BETTER_AUTH_SECRET` (from `openssl rand -base64 32`).
    - `BETTER_AUTH_URL` (optional): your custom domain. If it's not set, the app uses the Vercel production, branch and deployment URLs.
-   - `SHOW_DEMO_ACCOUNTS=1` (optional): shows the one-click demo logins.
 4. **Redeploy.** Vercel runs `npm run vercel-build`, which:
    - checks the env vars above and fails with a readable message if any are missing,
    - runs `prisma migrate deploy`,

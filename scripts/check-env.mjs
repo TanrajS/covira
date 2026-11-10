@@ -4,7 +4,8 @@ const missing = [];
 if (!process.env.DATABASE_URL) {
   missing.push("DATABASE_URL — connect Neon or Prisma Postgres (Vercel → Storage → Marketplace) to this project");
 }
-if (!process.env.BETTER_AUTH_SECRET || process.env.BETTER_AUTH_SECRET.length < 32) {
+// Only needed when real sign-in is enabled; the default demo mode has no logins.
+if (process.env.AUTH_MODE === "password" && (!process.env.BETTER_AUTH_SECRET || process.env.BETTER_AUTH_SECRET.length < 32)) {
   missing.push("BETTER_AUTH_SECRET — add a random value of 32+ chars (openssl rand -base64 32) under Settings → Environment Variables");
 }
 if (process.env.VERCEL && !process.env.BLOB_READ_WRITE_TOKEN) {
