@@ -1,11 +1,8 @@
 // Covira — Commercial Risk Broking CRM
 //
-// Local development runs on SQLite (zero setup). For production, change the
-// datasource provider to "postgresql", point DATABASE_URL at Postgres and swap
-// the driver adapter in src/lib/db.ts (see README).
-//
-// Enumerations are stored as strings and validated in application code
-// (src/lib/domain.ts) so the schema stays portable across SQLite and Postgres.
+// PostgreSQL everywhere: `npx prisma dev` locally (no Docker needed), Neon or
+// Prisma Postgres on Vercel. Enumerations are stored as strings and validated
+// in application code (src/lib/domain.ts).
 
 generator client {
   provider = "prisma-client"
@@ -13,7 +10,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
 }
 
 // ─── Auth (Better Auth core tables + CRM fields on user) ───────────────────

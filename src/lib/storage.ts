@@ -1,39 +1,24 @@
 import "server-only";
-import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
-import path from "node:path";
 import { randomUUID } from "node:crypto";
+import { createStorage, type StorageDriver } from "./storage-driver";
 
-/**
- * File storage driver. Local disk for development; implement the same
- * interface against S3 / Azure Blob for production.
- */
-export interface StorageDriver {
-  put(key: string, data: Buffer): Promise<void>;
-  get(key: string): Promise<Buffer>;
-  remove(key: string): Promise<void>;
-}
-
-const root = path.resolve(/*turbopackIgnore: true*/ process.env.STORAGE_DIR ?? "./storage");
-
-function resolveKey(key: string) {
-  const full = path.resolve(/*turbopackIgnore: true*/ root, key);
-  if (!full.startsWith(root + path.sep)) throw new Error("Invalid storage key");
-  return full;
-}
-
+let instance: StorageDriver | undefined;
+/** Lazily created so a missing token surfaces on first use, not at import. */
 export const storage: StorageDriver = {
-  async put(key, data) {
-    const full = resolveKey(key);
-    await mkdir(path.dirname(full), { recursive: true });
-    await writeFile(full, data);
+  get name() {
+    return (instance ??= createStorage()).name;
   },
-  get: (key) => readFile(resolveKey(key)),
-  async remove(key) {
-    await unlink(resolveKey(key)).catch(() => undefined);
-  },
+  put: (...a) => (instance ??= createStorage()).put(...a),
+  get: (...a) => (instance ??= createStorage()).get(...a),
+  remove: (...a) => (instance ??= createStorage()).remove(...a),
 };
 
-export const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
+/**
+ * Vercel functions reject request bodies over 4.5 MB, so uploads routed through
+ * the app are capped there on Vercel. (Direct-to-Blob client uploads would lift
+ * this; see README.)
+ */
+export const MAX_UPLOAD_BYTES = process.env.VERCEL ? 4.5 * 1024 * 1024 : 50 * 1024 * 1024;
 
 export const ALLOWED_EXTENSIONS: Record<string, string> = {
   ".pdf": "application/pdf",

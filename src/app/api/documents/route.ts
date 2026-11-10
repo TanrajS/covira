@@ -35,13 +35,13 @@ export async function POST(req: Request) {
   for (const f of files) {
     const ext = path.extname(f.name).toLowerCase();
     if (!ALLOWED_EXTENSIONS[ext]) return bad(`${f.name}: file type ${ext || "(none)"} is not allowed.`);
-    if (f.size > MAX_UPLOAD_BYTES) return bad(`${f.name}: exceeds the 50 MB limit.`);
+    if (f.size > MAX_UPLOAD_BYTES) return bad(`${f.name}: exceeds the ${Math.round(MAX_UPLOAD_BYTES / 1024 / 1024 * 10) / 10} MB upload limit.`);
   }
 
   const created = [];
   for (const f of files) {
     const key = storageKeyFor(clientId, termYear, category, f.name);
-    await storage.put(key, Buffer.from(await f.arrayBuffer()));
+    await storage.put(key, Buffer.from(await f.arrayBuffer()), ALLOWED_EXTENSIONS[path.extname(f.name).toLowerCase()]);
     created.push(
       await db.document.create({
         data: {

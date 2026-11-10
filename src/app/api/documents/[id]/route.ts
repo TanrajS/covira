@@ -14,14 +14,17 @@ export async function GET(req: Request, ctx: RouteContext<"/api/documents/[id]">
   });
   if (!doc || !can(user, doc.client, { type: "client.view" })) return new Response("Not found", { status: 404 });
 
-  const data = await storage.get(doc.storageKey).catch(() => null);
-  if (!data) return new Response("File missing from storage", { status: 410 });
+  const body = await storage.get(doc.storageKey).catch((e) => {
+    console.error("storage.get failed", doc.storageKey, e);
+    return null;
+  });
+  if (!body) return new Response("File missing from storage", { status: 410 });
 
   const inline = new URL(req.url).searchParams.get("download") !== "1" && /^(application\/pdf|image\/|text\/)/.test(doc.mimeType);
-  return new Response(new Uint8Array(data), {
+  return new Response(body, {
     headers: {
       "Content-Type": doc.mimeType,
-      "Content-Length": String(data.length),
+      "Content-Length": String(doc.sizeBytes),
       "Content-Disposition": `${inline ? "inline" : "attachment"}; filename*=UTF-8''${encodeURIComponent(doc.fileName)}`,
       "Cache-Control": "private, no-store",
       "X-Content-Type-Options": "nosniff",

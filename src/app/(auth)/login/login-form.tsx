@@ -28,7 +28,14 @@ export function LoginForm({ microsoft, demo }: { microsoft: boolean; demo: boole
     setError(null);
     const { error } = await authClient.signIn.email(creds);
     setPending(false);
-    if (error) return setError(error.message ?? "Sign-in failed");
+    if (error) {
+      return setError(
+        error.message ??
+          (error.status && error.status >= 500
+            ? "The server couldn't complete sign-in. Check the deployment's database and auth configuration."
+            : `Sign-in failed${error.status ? ` (${error.status})` : ""}`),
+      );
+    }
     router.push(destination);
     router.refresh();
   }

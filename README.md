@@ -5,8 +5,9 @@ Covira manages the commercial insurance renewal lifecycle, from gathering client
 ## Quick start
 
 ```bash
-cp .env.example .env            # then set BETTER_AUTH_SECRET (openssl rand -base64 32)
 npm install                     # also generates the Prisma client
+npm run db:start                # local Postgres via `prisma dev` (no Docker); prints a TCP URL
+cp .env.example .env            # paste that URL into DATABASE_URL, set BETTER_AUTH_SECRET (openssl rand -base64 32)
 npm run setup                   # migrate + seed demo data
 npm run dev                     # http://localhost:3000
 ```
@@ -29,11 +30,11 @@ Seed dates are relative to when you run the seed, so the pipeline always looks c
 |---|---|---|
 | App framework | **Next.js 16** (App Router, Server Components, Server Actions, Cache Components) | UI and API ship as one deployable. Data access and permission checks run on the server next to the database, so no separate API tier is needed. |
 | Language | **TypeScript** (strict) | Types are shared from the database to the UI. |
-| Database | **Prisma 7** with **SQLite** locally and **PostgreSQL** in production | Local setup needs nothing installed. Enum-like fields are stored as strings and validated in code, so the schema runs on both databases. |
+| Database | **Prisma 7** + **PostgreSQL** (`prisma dev` locally; Neon or Prisma Postgres on Vercel) | Local Postgres runs without Docker. Serverless hosts need a networked database, not a file. |
 | Auth | **Better Auth** (email/password, optional **Microsoft Entra ID** SSO) | Self-hosted, with session data kept in your own database. Brokerages typically run on Microsoft 365, so Entra SSO switches on with three env vars. Public sign-up is disabled. |
 | UI | **Tailwind CSS v4**, **lucide-react** icons, **dnd-kit** for drag-and-drop | dnd-kit is accessible (keyboard sensor included) and lets individual cards be disabled, which the workflow lock needs. |
 | Validation | **zod** | Every Server Action and upload is validated on the server. |
-| Files | Pluggable `StorageDriver` (local disk now) | Swap in S3 or Azure Blob by implementing the 3-method interface in `src/lib/storage.ts`. |
+| Files | **Vercel Blob** (private) when `BLOB_READ_WRITE_TOKEN` is set, otherwise local disk | Files are never public. Every download goes through a route that checks the user can see the account. The driver is in `src/lib/storage-driver.ts`. |
 
 ## Features
 
@@ -119,9 +120,20 @@ tests/rules.test.ts      permission matrix, workflow gates, matrix colours
 | `npm test` | unit tests for permissions and workflow rules |
 | `npm run typecheck` / `lint` | |
 
-## Going to production
+## Deploying to Vercel
 
-1. **PostgreSQL.** In `schema.prisma` set `provider = "postgresql"` and delete `prisma/migrations`, then run `npx prisma migrate dev --name init` against Postgres. Install `@prisma/adapter-pg` and swap the adapter in `src/lib/db.ts` (the snippet is in the file comment). In `src/lib/auth.ts` set `provider: "postgresql"`.
-2. **File storage.** Implement `StorageDriver` for S3 or Azure Blob, with server-side encryption. Local disk does not survive serverless deploys.
-3. **SSO.** Set `MICROSOFT_CLIENT_ID`, `MICROSOFT_CLIENT_SECRET` and `MICROSOFT_TENANT_ID`, and add a provisioning step that assigns capabilities (for example from Entra group claims).
-4. Set a strong `BETTER_AUTH_SECRET` and the correct `BETTER_AUTH_URL`.
+1. **Database.** In the Vercel project, go to **Storage → Marketplace**, add **Neon** (or **Prisma Postgres**), and connect it to the project. This sets `DATABASE_URL` (and `DATABASE_URL_UNPOOLED` for Neon, which migrations use).
+2. **File storage.** Go to **Storage → Blob**, create a store with **Private** access, and connect it. This sets `BLOB_READ_WRITE_TOKEN`.
+3. **Environment variables.** Under **Settings → Environment Variables**, add:
+   - `BETTER_AUTH_SECRET`: the output of `openssl rand -base64 32`.
+   - `BETTER_AUTH_URL` (optional): your custom domain. If it's not set, the app uses the Vercel production, branch and deployment URLs.
+   - `SHOW_DEMO_ACCOUNTS=1` (optional): shows the one-click demo logins.
+4. **Redeploy.** Vercel runs `npm run vercel-build`, which:
+   - checks the env vars above and fails with a readable message if any are missing,
+   - runs `prisma migrate deploy`,
+   - seeds the demo book **only if the database has no users**,
+   - runs `next build`.
+
+**Upload limit on Vercel.** Functions reject request bodies over 4.5 MB, so uploads on Vercel are capped at 4.5 MB (50 MB locally). Lifting this means switching to direct-to-Blob client uploads with `@vercel/blob/client`.
+
+**SSO.** Set `MICROSOFT_CLIENT_ID`, `MICROSOFT_CLIENT_SECRET` and `MICROSOFT_TENANT_ID`, and add a provisioning step that assigns capabilities (for example from Entra group claims).

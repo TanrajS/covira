@@ -1,14 +1,17 @@
-/* Demo data for Covira. Run with `npm run db:seed` (or `npx prisma db seed`). */
+/*
+ * Demo data for Covira.
+ *   npm run db:seed              wipe and reseed (asks nothing — dev only!)
+ *   tsx prisma/seed.ts --if-empty   seed only when there are no users (used by the Vercel build)
+ */
 import "dotenv/config";
-import { mkdir, rm, writeFile } from "node:fs/promises";
-import path from "node:path";
 import { randomUUID } from "node:crypto";
-import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
+import { PrismaPg } from "@prisma/adapter-pg";
 import { hashPassword } from "better-auth/crypto";
 import { PrismaClient } from "../src/generated/prisma/client";
+import { createStorage } from "../src/lib/storage-driver";
 
-const db = new PrismaClient({ adapter: new PrismaBetterSqlite3({ url: process.env.DATABASE_URL ?? "file:./prisma/dev.db" }) });
-const STORAGE = path.resolve(process.env.STORAGE_DIR ?? "./storage");
+const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL_UNPOOLED ?? process.env.DATABASE_URL }) });
+const storage = createStorage();
 const DAY = 86_400_000;
 const now = new Date();
 const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
@@ -203,8 +206,13 @@ const STAGES = ["D120", "D90", "D30", "BINDING", "BOUND"];
 const STAGE_DAYS_OUT: Record<string, number> = { D120: 120, D90: 90, D30: 30, BINDING: 7, BOUND: 0 };
 
 async function main() {
-  console.log("Resetting database and storage…");
-  await rm(STORAGE, { recursive: true, force: true });
+  if (process.argv.includes("--if-empty") && (await db.user.count()) > 0) {
+    console.log("Database already has users — skipping demo seed.");
+    return;
+  }
+  console.log(`Resetting database and storage (${storage.name})…`);
+  const oldKeys = await db.document.findMany({ select: { storageKey: true } });
+  for (const { storageKey } of oldKeys) await storage.remove(storageKey);
   await db.renewalStageEvent.deleteMany();
   await db.renewal.deleteMany();
   await db.document.deleteMany();
@@ -232,9 +240,8 @@ async function main() {
   for (const name of CARRIERS) carrierId[name] = (await db.carrier.create({ data: { name } })).id;
 
   const saveDoc = async (o: { clientId: string; termYear: string; category: string; docType?: string; fileName: string; data: Buffer; mime: string; by: string; daysAgo: number; policyId?: string }) => {
-    const key = `${o.clientId}/${o.termYear}/${o.category}/${randomUUID()}-${o.fileName}`;
-    await mkdir(path.dirname(path.join(STORAGE, key)), { recursive: true });
-    await writeFile(path.join(STORAGE, key), o.data);
+    const key = `${o.clientId}/${o.termYear}/${o.category}/${randomUUID()}-${o.fileName.replace(/[^\w.\- ]+/g, "_")}`;
+    await storage.put(key, o.data, o.mime);
     await db.document.create({
       data: {
         clientId: o.clientId, termYear: o.termYear, category: o.category, docType: o.docType ?? "OTHER", fileName: o.fileName,

@@ -7,6 +7,7 @@ import { currentTermForClient, getVault } from "@/lib/queries";
 import { DOC_CATEGORY_KEYS, STAGE_DOCUMENT_GATES, docCategoryLabel, isTermYear, shiftTermYear, stageLabel, type DocCategory } from "@/lib/domain";
 import { accountRoles, can } from "@/lib/permissions";
 import { UploadPanel } from "@/components/vault/upload-panel";
+import { MAX_UPLOAD_BYTES } from "@/lib/storage";
 import { DocList } from "@/components/vault/doc-list";
 import { Badge, Card, CardHeader, PageHeader, cx } from "@/components/ui";
 
@@ -73,7 +74,7 @@ export default async function VaultPage({ params, searchParams }: PageProps<"/cl
           <Card className="sticky top-20">
             <CardHeader title="Upload" subtitle={<>Filing into <Badge>{term}</Badge> by default</>} />
             <div className="p-4">
-              <UploadPanel clientId={client.id} term={term} terms={uploadTerms} allowed={allowed} initialCategory={initialCategory} policies={client.policies} />
+              <UploadPanel clientId={client.id} term={term} terms={uploadTerms} allowed={allowed} initialCategory={initialCategory} policies={client.policies} maxBytes={MAX_UPLOAD_BYTES} />
             </div>
           </Card>
         </aside>

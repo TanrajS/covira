@@ -22,7 +22,7 @@ const userBrief = { select: { id: true, name: true } } as const;
 
 export async function listClients(user: SessionUser, q?: string) {
   const clients = await db.client.findMany({
-    where: { AND: [clientScope(user), q ? { name: { contains: q } } : {}] },
+    where: { AND: [clientScope(user), q ? { name: { contains: q, mode: "insensitive" as const } } : {}] },
     include: {
       ae: userBrief,
       broker: userBrief,
@@ -92,7 +92,7 @@ export async function getQuickPull(clientId: string) {
 
 export async function searchClients(user: SessionUser, q: string) {
   const clients = await db.client.findMany({
-    where: { AND: [clientScope(user), q ? { name: { contains: q } } : {}] },
+    where: { AND: [clientScope(user), q ? { name: { contains: q, mode: "insensitive" as const } } : {}] },
     select: { id: true, name: true, industry: true, hqCity: true },
     orderBy: { name: "asc" },
     take: 8,

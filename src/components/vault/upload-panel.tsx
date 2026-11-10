@@ -10,7 +10,7 @@ import { Button, Field, Notice, cx, inputStyles } from "@/components/ui";
 const ACCEPT = ".pdf,.xlsx,.xls,.csv,.docx,.doc,.msg,.png,.jpg,.jpeg";
 
 export function UploadPanel({
-  clientId, term, terms, allowed, initialCategory, policies,
+  clientId, term, terms, allowed, initialCategory, policies, maxBytes,
 }: {
   clientId: string;
   term: string;
@@ -18,6 +18,7 @@ export function UploadPanel({
   allowed: Record<DocCategory, boolean>;
   initialCategory?: DocCategory;
   policies: { id: string; policyNumber: string; coverageLine: string }[];
+  maxBytes: number;
 }) {
   const router = useRouter();
   const firstAllowed = (Object.keys(allowed) as DocCategory[]).find((k) => allowed[k]);
@@ -34,6 +35,8 @@ export function UploadPanel({
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!files.length || !category) return;
+    const tooBig = files.find((f) => f.size > maxBytes);
+    if (tooBig) return setStatus({ ok: false, text: `${tooBig.name} is larger than the ${bytes(maxBytes)} upload limit.` });
     const fd = new FormData(e.currentTarget);
     fd.delete("file");
     files.forEach((f) => fd.append("file", f));
@@ -99,7 +102,7 @@ export function UploadPanel({
       >
         <UploadCloud className="mx-auto mb-1.5 size-6 text-slate-400" />
         <div className="text-xs text-slate-600">Drop files or <span className="font-medium text-brand-600">browse</span></div>
-        <div className="mt-0.5 text-[11px] text-slate-400">PDF, Excel, CSV, Word, Outlook, images · 50 MB max</div>
+        <div className="mt-0.5 text-[11px] text-slate-400">PDF, Excel, CSV, Word, Outlook, images · {bytes(maxBytes)} max</div>
         <input ref={inputRef} type="file" multiple accept={ACCEPT} className="hidden" onChange={(e) => { setFiles((f) => [...f, ...Array.from(e.target.files ?? [])]); e.target.value = ""; }} />
       </div>
       {files.length > 0 && (
