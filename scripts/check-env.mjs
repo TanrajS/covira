@@ -8,8 +8,8 @@ if (!process.env.DATABASE_URL) {
 if (process.env.AUTH_MODE === "password" && (!process.env.BETTER_AUTH_SECRET || process.env.BETTER_AUTH_SECRET.length < 32)) {
   missing.push("BETTER_AUTH_SECRET — add a random value of 32+ chars (openssl rand -base64 32) under Settings → Environment Variables");
 }
-if (process.env.VERCEL && !process.env.BLOB_READ_WRITE_TOKEN) {
-  missing.push("BLOB_READ_WRITE_TOKEN — create a PRIVATE Vercel Blob store (Storage → Blob) and connect it to this project");
+if (process.env.VERCEL && !process.env.BLOB_STORE_ID && !process.env.BLOB_READ_WRITE_TOKEN) {
+  missing.push("BLOB_STORE_ID — create a PRIVATE Vercel Blob store (Storage → Blob) and connect it to this project");
 }
 if (missing.length) {
   console.error("\n✖ Covira is missing required environment variables:\n");

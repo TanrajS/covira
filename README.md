@@ -39,7 +39,7 @@ Seed dates are relative to when you run the seed, so the pipeline always looks c
 | Access | **Role picker** now (demo mode). **Better Auth** is ready behind `AUTH_MODE=password` (email/password, optional **Microsoft Entra ID** SSO). | The instructor can open and use the app without signing in. Real auth is a config switch, not a rewrite, when the project scales. |
 | UI | **Tailwind CSS v4**, **lucide-react** icons, **dnd-kit** for drag-and-drop | dnd-kit is accessible (keyboard sensor included) and lets individual cards be disabled, which the workflow lock needs. |
 | Validation | **zod** | Every Server Action and upload is validated on the server. |
-| Files | **Vercel Blob** (private) when `BLOB_READ_WRITE_TOKEN` is set, otherwise local disk | Files are never public. Every download goes through a route that checks the user can see the account. The driver is in `src/lib/storage-driver.ts`. |
+| Files | **Vercel Blob** (private) when a Blob store is connected (`BLOB_STORE_ID` or `BLOB_READ_WRITE_TOKEN`), otherwise local disk | Files are never public. Every download goes through a route that checks the user can see the account. The driver is in `src/lib/storage-driver.ts`. |
 
 ## Features
 
@@ -128,7 +128,7 @@ tests/rules.test.ts      permission matrix, workflow gates, matrix colours
 ## Deploying to Vercel
 
 1. **Database.** In the Vercel project, go to **Storage → Marketplace**, add **Neon** (or **Prisma Postgres**), and connect it to the project. This sets `DATABASE_URL` (and `DATABASE_URL_UNPOOLED` for Neon, which migrations use).
-2. **File storage.** Go to **Storage → Blob**, create a store with **Private** access, and connect it. This sets `BLOB_READ_WRITE_TOKEN`.
+2. **File storage.** Go to **Storage → Blob**, create a store with **Private** access, and connect it. This sets `BLOB_STORE_ID` (newer stores, which authenticate automatically via Vercel OIDC) or `BLOB_READ_WRITE_TOKEN` (older stores). Either works.
 3. **Environment variables.** Under **Settings → Environment Variables**, add:
    - Nothing is needed for the default no-sign-in demo. For real logins, set `AUTH_MODE=password` and `BETTER_AUTH_SECRET` (from `openssl rand -base64 32`).
    - `BETTER_AUTH_URL` (optional): your custom domain. If it's not set, the app uses the Vercel production, branch and deployment URLs.

@@ -50,11 +50,18 @@ function localDriver(): StorageDriver {
   };
 }
 
+/**
+ * A Blob store connected to a Vercel project provides either a classic
+ * BLOB_READ_WRITE_TOKEN or (newer) BLOB_STORE_ID + Vercel OIDC, which the SDK
+ * resolves on its own at build and run time.
+ */
+export const blobConfigured = () => !!(process.env.BLOB_READ_WRITE_TOKEN || process.env.BLOB_STORE_ID);
+
 export function createStorage(): StorageDriver {
-  if (process.env.BLOB_READ_WRITE_TOKEN) return blobDriver;
+  if (blobConfigured()) return blobDriver;
   if (process.env.VERCEL) {
     // Vercel's filesystem is read-only and not shared between instances.
-    throw new Error("BLOB_READ_WRITE_TOKEN is not set. Connect a private Vercel Blob store to this project.");
+    throw new Error("No Vercel Blob store is connected (expected BLOB_STORE_ID or BLOB_READ_WRITE_TOKEN).");
   }
   return localDriver();
 }
